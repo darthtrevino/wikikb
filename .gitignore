@@ -1,0 +1,7 @@
+.index-store/
+.env
+tests/integration/.env
+node_modules/
+.soma/
+tools/wikikb-local/dist/
+release/

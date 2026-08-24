@@ -1,0 +1,70 @@
+name: Sync Labels
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/labels.yml"
+      - ".github/wikikb/labels.yml"
+      - ".github/workflows/sync-labels.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.repository.private == true }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Sync WikiKB labels
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const fs = require("fs");
+            const labelsPath = fs.existsSync(".github/wikikb/labels.yml")
+              ? ".github/wikikb/labels.yml"
+              : ".github/labels.yml";
+
+            function unquote(value) {
+              return String(value || "").trim().replace(/^["']|["']$/g, "");
+            }
+
+            const labels = [];
+            let current = null;
+            for (const line of fs.readFileSync(labelsPath, "utf8").split(/\r?\n/)) {
+              const start = line.match(/^-\s+name:\s*(.+)$/);
+              if (start) {
+                current = { name: unquote(start[1]) };
+                labels.push(current);
+                continue;
+              }
+              const field = line.match(/^\s+([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$/);
+              if (field && current) current[field[1]] = unquote(field[2]);
+            }
+
+            for (const label of labels) {
+              const params = {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: label.name,
+                color: label.color,
+                description: label.description || "",
+              };
+              try {
+                await github.rest.issues.createLabel(params);
+              } catch (error) {
+                if (error.status !== 422) throw error;
+                await github.rest.issues.updateLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: label.name,
+                  color: label.color,
+                  description: label.description || "",
+                });
+              }
+            }

@@ -1,0 +1,149 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Run offline checks
+        run: npm run check:offline
+
+  soma-runtimes:
+    name: SOMA ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x64
+            os: ubuntu-latest
+            archive: soma-v0.3.0-linux-x86_64.tar.gz
+            executable: soma
+          - name: Linux arm64
+            os: ubuntu-24.04-arm
+            archive: soma-v0.3.0-linux-arm64.tar.gz
+            executable: soma
+          - name: macOS arm64
+            os: macos-15
+            archive: soma-v0.3.0-macos-arm64.tar.gz
+            executable: soma
+          - name: Windows x64
+            os: windows-latest
+            archive: soma-v0.3.0-windows-x86_64.zip
+            executable: soma.exe
+          - name: Windows arm64
+            os: windows-11-arm
+            archive: soma-v0.3.0-windows-arm64.zip
+            executable: soma.exe
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Cache retrieval model
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/soma-model
+          key: soma-model-v0.3.0-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Exercise shipped SOMA binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_dir="$RUNNER_TEMP/soma-runtime"
+          mkdir -p "$runtime_dir/corpus"
+          archive="vendor/soma/${{ matrix.archive }}"
+          if [[ "$archive" == *.zip ]]; then
+            7z x "$archive" -o"$runtime_dir"
+          else
+            tar -xzf "$archive" -C "$runtime_dir"
+          fi
+          chmod +x "$runtime_dir/${{ matrix.executable }}"
+          "$runtime_dir/${{ matrix.executable }}" --version | grep -F "0.3.0"
+          cp -R wiki-mirror/. "$runtime_dir/corpus/"
+          cd "$runtime_dir"
+          "./${{ matrix.executable }}" index build corpus --name ci-smoke --title-field _stem --include-types md --no-incremental
+          index_db="$(find "$runtime_dir" -path '*/indexes/ci-smoke/index.db' -print -quit)"
+          test -n "$index_db"
+
+      - name: Exercise SOMA retrieval
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_dir="$RUNNER_TEMP/soma-runtime"
+          model_dir="$RUNNER_TEMP/soma-model"
+          if [[ ! -f "$model_dir/model.safetensors" ]]; then
+            "$runtime_dir/${{ matrix.executable }}" util models install model2vec-potion-retrieval-32m \
+              --revision 6fc8051fab2a1e0ee76689cf08c853792ac285e7 \
+              --output "$model_dir"
+          fi
+          node -e 'const fs=require("fs"); fs.writeFileSync(process.argv[1], JSON.stringify({query:{model2vec_model_path:process.argv[2]}}));' "$runtime_dir/query-preset.json" "$model_dir"
+          index_db="$(find "$runtime_dir" -path '*/indexes/ci-smoke/index.db' -print -quit)"
+          "$runtime_dir/${{ matrix.executable }}" query --index "$(dirname "$index_db")" --preset "$runtime_dir/query-preset.json" --max-tokens 4000 --output - "agentic workflows" > "$runtime_dir/context.json"
+          node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); const groups=[...(p.communities||[]),...(p.topics||[])]; const chunks=[...(p.chunks||[]),...groups.flatMap(c=>c.chunks||[])]; if(!chunks.some(c=>String(c.text||"").toLowerCase().includes("agentic workflow"))) process.exit(1);' "$runtime_dir/context.json"
+
+      - name: Exercise WikiKB runtime integration and concurrent model use
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build:wkb
+          WIKIKB_SOMA_MODEL_DIR="$RUNNER_TEMP/soma-model" node --test \
+            --test-name-pattern='vendored SOMA indexes|concurrent retrieval' \
+            tools/wikikb-local/test/smoke.mjs
+
+  workflows:
+    name: Workflows and shell scripts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Lint GitHub Actions workflows
+        uses: docker://rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+        with:
+          args: >-
+            -ignore
+            unexpected.key.*queue.*concurrency
+
+      - name: Lint shell scripts
+        run: >-
+          shellcheck
+          tools/kb-search.sh
+          tools/wikikb-local/install.sh
+          tools/wikikb-local/wkb
+          gh-wikikb

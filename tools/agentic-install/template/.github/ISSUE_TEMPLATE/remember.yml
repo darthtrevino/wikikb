@@ -1,0 +1,61 @@
+name: "Remember: store a note in the KB"
+description: Store a durable note, decision, answer, or finding in the knowledge base
+labels: ["kb-remember"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this to preserve a concise memory in the repository wiki. Do not include credentials, secrets, token prefixes, private personal data, or content that should not be retained.
+  - type: input
+    id: title
+    attributes:
+      label: Title
+      description: Short title for the memory page.
+      placeholder: "e.g. Decision: use safe outputs for wiki writes"
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options:
+        - decision
+        - finding
+        - note
+        - answer
+        - artifact
+        - follow-up
+    validations:
+      required: true
+  - type: input
+    id: namespace
+    attributes:
+      label: Namespace
+      description: Optional dotted namespace for the memory.
+      placeholder: "e.g. project.decisions"
+    validations:
+      required: false
+  - type: input
+    id: tags
+    attributes:
+      label: Tags
+      description: Comma-separated tags.
+      placeholder: "release,agent-memory"
+    validations:
+      required: false
+  - type: textarea
+    id: memory
+    attributes:
+      label: Memory
+      description: The durable fact, decision, answer, or note to preserve.
+      placeholder: "Write the note here."
+    validations:
+      required: true
+  - type: textarea
+    id: sources
+    attributes:
+      label: Sources
+      description: Optional links, wiki paths, issue URLs, command output, or context supporting the memory.
+      placeholder: "- docs/agent-memory.md\n- https://github.com/owner/repo/issues/123"
+    validations:
+      required: false

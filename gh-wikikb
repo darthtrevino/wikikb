@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+WIKIKB_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [ ! -f "$WIKIKB_ROOT/tools/wikikb-local/dist/main.js" ]; then
+  if [ ! -d "$WIKIKB_ROOT/node_modules" ]; then
+    npm ci --prefix "$WIKIKB_ROOT"
+  fi
+  npm run --prefix "$WIKIKB_ROOT" build:wkb
+fi
+
+exec "$WIKIKB_ROOT/tools/wikikb-local/wkb" "$@"

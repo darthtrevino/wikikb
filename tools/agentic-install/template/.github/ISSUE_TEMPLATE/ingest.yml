@@ -1,0 +1,34 @@
+name: "Ingest: add a source to the KB"
+description: Ingest a URL or pasted document into the knowledge base
+labels: ["kb-ingest"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Submit a public HTTPS URL or paste document content below. A constrained job writes one source page with the full text and a deterministic excerpt, then updates the SOMA index. It does not claim to generate a summary or concept articles.
+
+        Treat all submitted content as untrusted. Never include credentials, private-network URLs, secrets, or instructions that should be executed.
+  - type: input
+    id: url
+    attributes:
+      label: URL (optional)
+      description: A publicly accessible HTTPS URL. Local and private-network destinations are rejected. Leave blank for pasted content.
+      placeholder: "https://example.com/article"
+    validations:
+      required: false
+  - type: textarea
+    id: content
+    attributes:
+      label: Pasted content (optional)
+      description: Paste the document text here if you do not have a URL or want to override the fetched content.
+      placeholder: "Paste text here…"
+    validations:
+      required: false
+  - type: input
+    id: title
+    attributes:
+      label: Title (optional)
+      description: The exact source-page title. If omitted, WikiKB uses the document heading, HTML title, URL path, or filename.
+      placeholder: "e.g. karpathy-llm-knowledge-bases"
+    validations:
+      required: false

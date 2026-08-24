@@ -1,0 +1,22 @@
+name: "Lint: run a KB health check"
+description: Scan the wiki for broken links, orphaned pages, and thin pages
+labels: ["kb-lint"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Opening this issue triggers the **lint-kb** workflow. The agent will:
+
+        - Check for broken `[[wiki-links]]`
+        - Find orphaned pages (no inbound links)
+        - Flag thin pages (under 200 characters)
+
+        The report recommends fixes but never changes the wiki automatically.
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes (optional)
+      description: Any specific areas of the wiki you want the health check to focus on, or additional context for the agent.
+      placeholder: "e.g. Focus on the machine-learning category — I recently added several pages manually."
+    validations:
+      required: false

@@ -1,0 +1,66 @@
+name: Initialize Wiki
+
+on:
+  workflow_dispatch:
+
+jobs:
+  init-wiki:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.repository.private == true }}
+    permissions:
+      contents: write
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Clone wiki
+        run: |
+          GIT_AUTH="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $GIT_AUTH"
+          export GIT_TERMINAL_PROMPT=0
+          if ! git clone "https://github.com/${GITHUB_REPOSITORY}.wiki.git" /tmp/wiki; then
+            echo "::error::Enable the repository wiki and create its first Home page in GitHub, then rerun this workflow."
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Copy seed wiki pages
+        run: |
+          if [ -d wiki-mirror ]; then
+            cp -r wiki-mirror/. /tmp/wiki/
+          else
+            mkdir -p /tmp/wiki
+            printf '# WikiKB Knowledge Base\n\nThis wiki is maintained by WikiKB agents.\n' > /tmp/wiki/Home.md
+          fi
+          mkdir -p /tmp/wiki/concepts /tmp/wiki/sources /tmp/wiki/queries /tmp/wiki/_index
+
+      - name: Push initial wiki content
+        run: |
+          GIT_AUTH="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $GIT_AUTH"
+          export GIT_TERMINAL_PROMPT=0
+          cd /tmp/wiki
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add -A
+          git diff --cached --quiet || git commit -m "kb: initialize wiki structure"
+          git push
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sync issue labels
+        run: |
+          gh label create "kb-ingest"   --color "0075ca" --description "Ingest a URL or pasted content into the knowledge base"   --force
+          gh label create "kb-question" --color "e4e669" --description "Ask a question against the knowledge base"                  --force
+          gh label create "kb-remember" --color "5319e7" --description "Store a durable note, decision, answer, or finding in the knowledge base" --force
+          gh label create "kb-search"   --color "d876e3" --description "Search the knowledge base for a term or concept"            --force
+          gh label create "kb-lint"     --color "e11d48" --description "Run a health check / consistency pass over the wiki"        --force
+          gh label create "kb-explore"  --color "16a34a" --description "Report gaps, weak connections, and follow-up questions" --force
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

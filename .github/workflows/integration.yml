@@ -1,0 +1,40 @@
+name: Live Integration
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wikikb-live-integration
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      WIKIKB_TEST_REPO: ${{ vars.WIKIKB_TEST_REPO }}
+      WIKIKB_INTEGRATION_TOKEN: ${{ secrets.WIKIKB_INTEGRATION_TOKEN }}
+      WIKIKB_COPILOT_TOKEN: ${{ secrets.WIKIKB_COPILOT_TOKEN }}
+      WIKIKB_AI_MODEL: ${{ vars.WIKIKB_AI_MODEL || 'claude-sonnet-4.6' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run every live integration test
+        run: npm run test:wkb:integration

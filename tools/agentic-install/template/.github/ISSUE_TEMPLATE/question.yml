@@ -1,0 +1,16 @@
+name: "Question: ask the KB"
+description: Ask a question and let the agent search the wiki and post an answer
+labels: ["kb-question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Write your question below. A constrained job uses SOMA retrieval and a text-only Copilot request, then posts the cited answer as a comment. It does not file the answer automatically; use `kb-remember` if the result should become durable knowledge.
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What do you want to know? Be as specific as possible for the best answer.
+      placeholder: "e.g. What are the trade-offs between tiered indexes and flat indexes for LLM knowledge bases?"
+    validations:
+      required: true

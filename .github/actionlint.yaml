@@ -1,0 +1,6 @@
+paths:
+  .github/workflows/**/*.{yml,yaml}:
+    ignore:
+      # GitHub Actions supports concurrency.queue as of 2026; actionlint 1.7.12
+      # predates that schema addition. Keep all other checks enabled.
+      - 'unexpected key "queue" for "concurrency" section'

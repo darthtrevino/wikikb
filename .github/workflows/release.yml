@@ -1,0 +1,78 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      WIKIKB_TEST_REPO: ${{ vars.WIKIKB_TEST_REPO }}
+      WIKIKB_INTEGRATION_TOKEN: ${{ secrets.WIKIKB_INTEGRATION_TOKEN }}
+      WIKIKB_COPILOT_TOKEN: ${{ secrets.WIKIKB_COPILOT_TOKEN }}
+      WIKIKB_AI_MODEL: ${{ vars.WIKIKB_AI_MODEL || 'claude-sonnet-4.6' }}
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Verify tag matches package version
+        run: |
+          VERSION="$(node -p 'require("./package.json").version')"
+          if [[ "$GITHUB_REF_NAME" != "v$VERSION" ]]; then
+            echo "Expected tag v$VERSION, got $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+
+      - name: Run release checks
+        run: npm run release:check
+
+      - name: Lint GitHub Actions workflows
+        uses: docker://rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+        with:
+          args: >-
+            -ignore
+            unexpected.key.*queue.*concurrency
+
+      - name: Lint shell scripts
+        uses: docker://koalaman/shellcheck-alpine:v0.11.0@sha256:9955be09ea7f0dbf7ae942ac1f2094355bb30d96fffba0ec09f5432207544002
+        with:
+          args: >-
+            tools/kb-search.sh
+            tools/wikikb-local/install.sh
+            tools/wikikb-local/wkb
+            gh-wikikb
+
+      - name: Build supported release bundle
+        run: npm run package:release
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME"
+          release/*.tar.gz
+          release/*.sha256
+          --verify-tag
+          --generate-notes
+          --title "WikiKB $GITHUB_REF_NAME"

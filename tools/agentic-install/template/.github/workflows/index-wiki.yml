@@ -1,0 +1,54 @@
+name: Index Wiki with WikiKB
+
+on:
+  workflow_run:
+    workflows: ["Compile Knowledge Base", "Remember Knowledge"]
+    types: [completed]
+  workflow_dispatch: {}
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wikikb-shared-index
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.repository.private == true && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success') }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+
+      - name: Install and build WikiKB
+        run: |
+          set -euo pipefail
+          WIKIKB_HOME="$GITHUB_WORKSPACE"
+          if [ -f "$GITHUB_WORKSPACE/.github/wikikb/package.json" ]; then
+            WIKIKB_HOME="$GITHUB_WORKSPACE/.github/wikikb"
+          fi
+          npm ci --prefix "$WIKIKB_HOME"
+          npm run --prefix "$WIKIKB_HOME" build:wkb
+          echo "WIKIKB_HOME=$WIKIKB_HOME" >> "$GITHUB_ENV"
+
+      - name: Sync and check wiki
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WIKIKB_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WIKIKB_CACHE_DIR: ${{ runner.temp }}/wikikb
+        run: |
+          set -euo pipefail
+          WKB="$WIKIKB_HOME/tools/wikikb-local/wkb"
+          "$WKB" add wikikb "$GITHUB_REPOSITORY"
+          "$WKB" wikikb sync
+          "$WKB" wikikb status
+          "$WKB" wikikb lint
+          "$WKB" wikikb index
+          echo "Shared SOMA index synchronized."

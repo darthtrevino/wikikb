@@ -1,0 +1,23 @@
+name: "Explore: discover gaps and connections"
+description: Scan the KB for broken links, weakly connected pages, thin areas, and follow-up questions
+labels: ["kb-explore"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Opening this issue triggers a constrained **explore-kb** job that scans the wiki and produces a report covering:
+
+        - Missing or broken wiki links
+        - Pages with no inbound links
+        - Thin pages that need more evidence or context
+        - Suggested follow-up questions
+
+        The report is posted as a comment on this issue.
+  - type: input
+    id: focus
+    attributes:
+      label: Focus area (optional)
+      description: Limit the exploration to a specific category or topic. Leave blank to explore the whole KB.
+      placeholder: "e.g. reinforcement-learning"
+    validations:
+      required: false

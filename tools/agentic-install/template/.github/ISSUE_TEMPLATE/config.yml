@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: WikiKB documentation
+    url: https://github.com/githubnext/wikikb/blob/main/README.md
+    about: Learn how WikiKB works and how to use each issue action

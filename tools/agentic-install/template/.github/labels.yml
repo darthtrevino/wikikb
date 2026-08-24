@@ -1,0 +1,23 @@
+- name: "kb-ingest"
+  color: "0075ca"
+  description: "Ingest a URL or pasted content into the knowledge base"
+
+- name: "kb-question"
+  color: "e4e669"
+  description: "Ask a question against the knowledge base"
+
+- name: "kb-remember"
+  color: "5319e7"
+  description: "Store a durable note, decision, answer, or finding in the knowledge base"
+
+- name: "kb-search"
+  color: "d876e3"
+  description: "Search the knowledge base for a term or concept"
+
+- name: "kb-lint"
+  color: "e11d48"
+  description: "Run a health check / consistency pass over the wiki"
+
+- name: "kb-explore"
+  color: "16a34a"
+  description: "LLM suggests new connections, missing articles, and follow-up questions"

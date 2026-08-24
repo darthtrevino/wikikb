@@ -1,0 +1,30 @@
+{
+  "name": "wikikb-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GitHub-wiki-backed durable memory for agents.",
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "install:wkb": "bash tools/wikikb-local/install.sh",
+    "build:wkb": "tsc -p tools/wikikb-local/tsconfig.json",
+    "validate:wiki": "node tools/validate-wiki.js wiki-mirror",
+    "validate:release": "node tools/validate-release.js",
+    "test:wkb:node": "node --test --test-concurrency=1 tools/wikikb-local/test/smoke.mjs tools/wikikb-local/test/release.mjs",
+    "test:wkb:integration": "node --test tools/wikikb-local/test/integration.mjs",
+    "test:wkb": "npm run test:wkb:node && npm run test:wkb:integration",
+    "audit:dependencies": "npm audit --audit-level=moderate",
+    "bundle:check": "node tools/package-release.js --check",
+    "package:release": "node tools/package-release.js",
+    "check:offline": "npm run build:wkb && npm run validate:wiki && npm run validate:release && npm run test:wkb:node",
+    "check": "npm run check:offline && npm run test:wkb:integration",
+    "release:check": "npm run check && npm run audit:dependencies && npm run bundle:check"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "typescript": "^7.0.2"
+  }
+}
