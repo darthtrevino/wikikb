@@ -1,10 +1,10 @@
 # WikiKB
 
-WikiKB is an efficient, semantic knowledge base for humans and agents. It lives in a GitHub repository's wiki, and is accessible from the command line or through GitHub Issues.
+WikiKB is an efficient, semantic knowledge base for humans and agents, stored in a GitHub repository's wiki. Content can be ingested or queried from the command line, through GitHub Issues, or as an agent skill.
 
-Indexing the knowledge base does not require a model. Searching uses a small local static embedding model, without calling a generative model or hosted inference service. Both operations run entirely on CPU, either on the client machine or within GitHub Actions. Storage is provided by the repository's GitHub Wiki.
+An LLM provider is not required to ingest content, or to search the knowledge base. A small, local embedding model runs entirely on CPU, either on the client machine or within GitHub Actions. 
 
-Retrieval-augmented generation (RAG) operations such as summarization and question-answering can use any configured AI provider.
+Retrieval-augmented generation (RAG) operations, such as summarization and question-answering, can use any configured AI provider.
 
 ## Install
 
