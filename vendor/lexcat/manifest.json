@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "name": "LEXCAT",
+  "description": "Model-free lexical retrieval; WikiKB's indexing and retrieval runtime",
+  "version": "0.0.11",
+  "notices": "THIRD_PARTY_NOTICES.txt",
+  "notices_sha256": "48baf7a99c5267c9dcb63617894ea925ba2a72d6f0d6ac6d31c6f22403fd287c",
+  "index_schema_version": 11,
+  "artifacts": [
+    {
+      "platform": "darwin",
+      "arch": "arm64",
+      "archive": "lexcat-v0.0.11-macos-arm64.tar.gz",
+      "format": "tar.gz",
+      "executable": "lexcat",
+      "provenance": "Executable bytes are unchanged from the authorized binary-only 0.0.11 runtime release and repackaged under a neutral filename.",
+      "upstream_asset": "lexcat-aarch64-macos",
+      "upstream_sha256": "890114f3e830105148ebf0df98377ebc377a013d77aed445fe0aa22d0af54e38",
+      "archive_sha256": "31ff1368c1895ad11f79413a8199b9ff6543e1156cdfc86a4d990e6a71f1b576",
+      "executable_sha256": "890114f3e830105148ebf0df98377ebc377a013d77aed445fe0aa22d0af54e38"
+    },
+    {
+      "platform": "linux",
+      "arch": "x64",
+      "archive": "lexcat-v0.0.11-linux-x86_64.tar.gz",
+      "format": "tar.gz",
+      "executable": "lexcat",
+      "provenance": "Executable bytes are unchanged from the authorized binary-only 0.0.11 runtime release and repackaged under a neutral filename.",
+      "upstream_asset": "lexcat-x86_64-linux",
+      "upstream_sha256": "80da50549c4023feb8fa72f56911273f5d59dc64ed4de180f6cb9b2c1cf5f3c6",
+      "archive_sha256": "f4bcb1d98b1891071df4c993b5ed1b5ba606259e1946a9138b84a9a204482da3",
+      "executable_sha256": "80da50549c4023feb8fa72f56911273f5d59dc64ed4de180f6cb9b2c1cf5f3c6"
+    },
+    {
+      "platform": "win32",
+      "arch": "x64",
+      "archive": "lexcat-v0.0.11-windows-x86_64.zip",
+      "format": "zip",
+      "executable": "lexcat.exe",
+      "provenance": "Executable bytes are unchanged from the authorized binary-only 0.0.11 runtime release and repackaged under a neutral filename.",
+      "upstream_asset": "lexcat-x86_64-windows.exe",
+      "upstream_sha256": "6f9acf7b880b44cc5c9d576fd3d0f1cb00fe96f012cde70aa1719bb317fb1c2a",
+      "archive_sha256": "33a7e937aec05934dd47155c5b8cce5f65a0ebbf6f093a7d717af1fdffa709c5",
+      "executable_sha256": "6f9acf7b880b44cc5c9d576fd3d0f1cb00fe96f012cde70aa1719bb317fb1c2a"
+    }
+  ]
+}

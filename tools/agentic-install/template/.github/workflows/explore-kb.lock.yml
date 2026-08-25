@@ -1131,7 +1131,7 @@ jobs:
         env:
           GH_AW_AGENT_OUTPUT: ${{ runner.temp }}/gh-aw/safe-jobs/agent_output.json
         with:
-          node-version: "22"
+          node-version: "22.5.0"
       - name: Install, explore, and report
         run: |
           set -euo pipefail

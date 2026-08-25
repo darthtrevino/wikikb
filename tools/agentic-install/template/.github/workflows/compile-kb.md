@@ -36,7 +36,7 @@ safe-outputs:
         Authorize the constrained job to derive and ingest sources from the
         triggering open issue through the WikiKB CLI.
       runs-on: ubuntu-latest
-      output: "Sources ingested and the shared SOMA index updated"
+      output: "Sources ingested and the shared LexCAT index rebuilt"
       permissions:
         contents: write
         issues: write
@@ -51,7 +51,7 @@ safe-outputs:
         - name: Set up Node.js
           uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
           with:
-            node-version: "22"
+            node-version: "22.5.0"
         - name: Install and build WikiKB
           run: |
             set -euo pipefail
@@ -197,7 +197,7 @@ safe-outputs:
             WIKIKB_ISSUE_NUMBER: ${{ github.event.issue.number }}
           run: |
             set -euo pipefail
-            gh issue comment "$WIKIKB_ISSUE_NUMBER" --body "WikiKB ingested the requested sources and updated the shared SOMA index."
+            gh issue comment "$WIKIKB_ISSUE_NUMBER" --body "WikiKB ingested the requested sources and rebuilt the shared LexCAT index."
             gh issue close "$WIKIKB_ISSUE_NUMBER" --reason completed
 ---
 
@@ -226,7 +226,7 @@ the wiki write completes.
 
 Do not read and rewrite the files into wiki pages yourself. Do not call
 `push-wiki`. `wkb ingest` owns source-page generation, wiki pushes, and shared
-SOMA indexing.
+LexCAT indexing.
 
 The constrained job rejects empty requests, apparent credentials, non-HTTPS or
 credentialed URLs, and private-network destinations. It posts a fixed completion

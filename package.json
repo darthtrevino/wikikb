@@ -6,7 +6,7 @@
   "license": "SEE LICENSE IN LICENSE",
   "type": "commonjs",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.5.0"
   },
   "scripts": {
     "install:wkb": "bash tools/wikikb-local/install.sh",

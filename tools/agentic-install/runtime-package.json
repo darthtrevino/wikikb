@@ -5,7 +5,7 @@
   "license": "SEE LICENSE IN LICENSE",
   "type": "commonjs",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.5.0"
   },
   "scripts": {
     "build:wkb": "tsc -p tools/wikikb-local/tsconfig.json"
