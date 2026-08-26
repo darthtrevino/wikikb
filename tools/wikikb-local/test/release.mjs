@@ -147,17 +147,17 @@ test("vendored LexCAT manifest pins binary-only archives by checksum", () => {
   const vendorDir = join(repoRoot, "vendor", "lexcat");
   const manifest = JSON.parse(readFileSync(join(vendorDir, "manifest.json"), "utf8"));
   assert.equal(manifest.name, "LEXCAT");
-  assert.equal(manifest.version, "0.0.11");
+  assert.equal(manifest.version, "0.0.12");
   assert.equal(manifest.notices, "THIRD_PARTY_NOTICES.txt");
   // LexCAT is a model-free lexical engine, so no model may be pinned.
   assert.ok(!("model" in manifest));
   assert.equal(manifest.index_schema_version, 11);
-  assert.equal(manifest.artifacts.length, 3);
+  assert.equal(manifest.artifacts.length, 5);
   const notices = join(vendorDir, manifest.notices);
   assert.equal(createHash("sha256").update(readFileSync(notices)).digest("hex"), manifest.notices_sha256);
 
   for (const artifact of manifest.artifacts) {
-    assert.match(artifact.archive, /^lexcat-v0\.0\.11-/);
+    assert.match(artifact.archive, /^lexcat-v0\.0\.12-/);
     assert.match(artifact.executable, /^lexcat(?:\.exe)?$/);
     assert.match(artifact.upstream_sha256, /^[a-f0-9]{64}$/);
     assert.match(artifact.upstream_asset, /^lexcat-/);
@@ -186,12 +186,17 @@ test("native vendored LexCAT executable matches its pinned checksum and query co
   assert.equal(unpacked.status, 0, unpacked.stderr || unpacked.stdout);
   const executable = join(extracted, artifact.executable);
   assert.equal(createHash("sha256").update(readFileSync(executable)).digest("hex"), artifact.executable_sha256);
-  // LexCAT 0.0.11 reports no version, so the checksum above is the only pin.
-  // Assert the subcommand surface WikiKB depends on instead.
+  // `--version` reports 0.0.0 on every 0.0.12 build, so the release number is
+  // not assertable and the checksum above stays the only version pin. The
+  // index schema it reports is real, and it is what WikiKB's index cache keys
+  // on, so that is checked here alongside the subcommand surface.
+  const version = run(executable, ["--version"]);
+  assert.equal(version.status, 0, version.stderr || version.stdout);
+  assert.match(`${version.stdout}${version.stderr}`, new RegExp(`index schema ${manifest.index_schema_version}\\b`));
   const help = run(executable, ["--help"]);
   assert.equal(help.status, 0, help.stderr || help.stdout);
   const helpText = `${help.stdout}${help.stderr}`;
-  for (const subcommand of ["build", "query"]) assert.match(helpText, new RegExp(`\\b${subcommand}\\b`));
+  for (const subcommand of ["build", "sync", "query"]) assert.match(helpText, new RegExp(`\\b${subcommand}\\b`));
   assert.match(helpText, /--index/);
 });
 
@@ -205,7 +210,7 @@ test("source installer builds a launcher backed by the vendored LexCAT runtime",
     },
   });
   assert.equal(installed.status, 0, installed.stderr || installed.stdout);
-  assert.match(installed.stdout, /LexCAT: vendored 0\.0\.11 binary available/);
+  assert.match(installed.stdout, /LexCAT: vendored 0\.0\.12 binary available/);
 
   const launcher = join(installDir, "wkb");
   assert.ok(existsSync(launcher));

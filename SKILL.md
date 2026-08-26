@@ -11,7 +11,7 @@ export PATH="$HOME/.local/bin:$PATH"
 export WIKIKB_GITHUB_TOKEN="$(gh auth token)"
 ```
 
-Node.js 22.5.0+ and LexCAT are required. Retrieval has no alternate backend.
+Node.js 22+ and LexCAT are required. Retrieval has no alternate backend.
 
 ## Agent Contract
 

@@ -90,7 +90,11 @@ does, so configure only a command you control.
 
 LexCAT is mandatory. WikiKB verifies and extracts the matching executable from `vendor/lexcat/`; it never downloads a runtime.
 
-LexCAT is model-free lexical BM25 retrieval. It downloads no model, performs no embedding step, and needs no network at query time. Supported vendored platforms are `linux/x64`, `darwin/arm64`, and `win32/x64`; unsupported hosts fail with guidance to set `WIKIKB_LEXCAT_BIN` to an operator-approved executable.
+LexCAT is model-free lexical BM25 retrieval. It downloads no model, performs no embedding step, and needs no network at query time. Supported vendored platforms are `linux/x64`, `linux/arm64`, `darwin/arm64`, `darwin/x64`, and `win32/x64`; `win32/arm64` runs the `win32/x64` build under emulation. Unsupported hosts fail with guidance to set `WIKIKB_LEXCAT_BIN` to an operator-approved executable.
+
+Wiki identity travels with the corpus as YAML frontmatter, which LexCAT strips from the indexed text and returns on every chunk of a document, so retrieval reads titles, wiki paths, and chunk text straight out of `lexcat query --json`. An index built by the current contract is refreshed with `lexcat sync`, which reconciles only added, changed, and removed documents; `wkb <kb> index --force` always rebuilds from scratch.
+
+WikiKB generates a `lexcat.toml` that sets `analyzer_min_vocab = 1`. LexCAT's default of `2` prunes any term that occurs in a single chunk, which silently makes rare identifiers — the highest-value lookups in a knowledge base — unsearchable while still exiting 0.
 
 The parentless `wikikb-cache-v1` branch stores at most eight indexes plus integrity manifests and no Markdown. Restore validates source, runtime, paths, size, and checksums. These checks prove integrity, not authorship: anyone allowed to write the private wiki is inside the cache trust boundary. A requested push that remains unpublished fails the command.
 

@@ -12,9 +12,11 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 INSTALL_DIR="${WKB_INSTALL_DIR:-$HOME/.local/bin}"
 LEXCAT_ARCHIVE=""
 case "$(uname -s):$(uname -m)" in
-    Linux:x86_64|Linux:amd64) LEXCAT_ARCHIVE="$REPO_ROOT/vendor/lexcat/lexcat-v0.0.11-linux-x86_64.tar.gz" ;;
-    Darwin:arm64|Darwin:aarch64) LEXCAT_ARCHIVE="$REPO_ROOT/vendor/lexcat/lexcat-v0.0.11-macos-arm64.tar.gz" ;;
-    MINGW*:x86_64|MSYS*:x86_64|CYGWIN*:x86_64) LEXCAT_ARCHIVE="$REPO_ROOT/vendor/lexcat/lexcat-v0.0.11-windows-x86_64.zip" ;;
+    Linux:x86_64|Linux:amd64) LEXCAT_ARCHIVE="$REPO_ROOT/vendor/lexcat/lexcat-v0.0.12-linux-x86_64.tar.gz" ;;
+    Linux:aarch64|Linux:arm64) LEXCAT_ARCHIVE="$REPO_ROOT/vendor/lexcat/lexcat-v0.0.12-linux-arm64.tar.gz" ;;
+    Darwin:arm64|Darwin:aarch64) LEXCAT_ARCHIVE="$REPO_ROOT/vendor/lexcat/lexcat-v0.0.12-macos-arm64.tar.gz" ;;
+    Darwin:x86_64) LEXCAT_ARCHIVE="$REPO_ROOT/vendor/lexcat/lexcat-v0.0.12-macos-x86_64.tar.gz" ;;
+    MINGW*:x86_64|MSYS*:x86_64|CYGWIN*:x86_64) LEXCAT_ARCHIVE="$REPO_ROOT/vendor/lexcat/lexcat-v0.0.12-windows-x86_64.zip" ;;
 esac
 
 echo "Installing wkb..."
@@ -25,19 +27,17 @@ if [ -n "${WIKIKB_LEXCAT_BIN:-}" ]; then
         exit 1
     fi
 elif [ -z "$LEXCAT_ARCHIVE" ] || [ ! -f "$LEXCAT_ARCHIVE" ]; then
-    echo "ERROR: No vendored LexCAT 0.0.11 binary for $(uname -s)/$(uname -m)." >&2
+    echo "ERROR: No vendored LexCAT 0.0.12 binary for $(uname -s)/$(uname -m)." >&2
     echo "Set WIKIKB_LEXCAT_BIN to an approved LexCAT executable." >&2
     exit 1
 fi
 
 if ! command -v node &>/dev/null; then
-    echo "ERROR: Node.js 22.5+ required."
+    echo "ERROR: Node.js 22+ required."
     exit 1
 fi
-# LexCAT indexes are SQLite files that wkb reads through node:sqlite, which
-# first shipped in Node.js 22.5.
-node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 22 || (major === 22 && minor >= 5) ? 0 : 1)' || {
-    echo "ERROR: Node.js 22.5+ required. Found: $(node --version)"
+node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 22 ? 0 : 1)' || {
+    echo "ERROR: Node.js 22+ required. Found: $(node --version)"
     exit 1
 }
 echo "  Node: $(node --version)"
@@ -61,7 +61,7 @@ chmod +x "$WRAPPER"
 if [ -n "${WIKIKB_LEXCAT_BIN:-}" ]; then
     echo "  LexCAT: executable override $WIKIKB_LEXCAT_BIN"
 elif [ -n "$LEXCAT_ARCHIVE" ] && [ -f "$LEXCAT_ARCHIVE" ]; then
-    echo "  LexCAT: vendored 0.0.11 binary available (extracted on first index)"
+    echo "  LexCAT: vendored 0.0.12 binary available (extracted on first index)"
 fi
 
 echo ""

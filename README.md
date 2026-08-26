@@ -20,7 +20,7 @@ The agent confirms a target repository, enables and initializes its GitHub Wiki,
 
 ### Manual
 
-Requires Node.js 22.5.0+, Git, GitHub CLI, an initialized GitHub Wiki, and a configured Git author for writes.
+Requires Node.js 22+, Git, GitHub CLI, an initialized GitHub Wiki, and a configured Git author for writes.
 
 ```bash
 npm ci

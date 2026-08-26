@@ -1,6 +1,6 @@
 # Vendored LexCAT runtime
 
-WikiKB ships LexCAT 0.0.11, a model-free lexical retrieval CLI, as binary-only
+WikiKB ships LexCAT 0.0.12, a model-free lexical retrieval CLI, as binary-only
 platform archives. WikiKB uses LexCAT as its indexing and retrieval runtime.
 The runtime is mandatory for indexing and retrieval; no source checkout,
 runtime download, or alternate retrieval path is included.
@@ -10,12 +10,12 @@ verification. WikiKB verifies the archive and executable before extracting the
 runtime into the user's private cache. `WIKIKB_LEXCAT_BIN` can select an
 approved, operator-managed executable for controlled testing and deployment.
 
-The macOS arm64, Linux x64, and Windows x64 packages contain unchanged
-executable bytes from the LexCAT team's authorized binary release. WikiKB
-packages the executable as `lexcat` or `lexcat.exe` for runtime-path
-compatibility and wraps it in a checksum-pinned archive. The manifest also pins
-the digest of the original release asset. No private source-repository locator
-or executable network fetch is part of the release.
+Every package contains unchanged executable bytes from the LexCAT team's
+authorized binary release. WikiKB packages the executable as `lexcat` or
+`lexcat.exe` for runtime-path compatibility and wraps it in a checksum-pinned
+archive. The manifest also pins the digest of the original release asset, which
+matches the `SHA256SUMS` manifest published with the release. No private
+source-repository locator or executable network fetch is part of the release.
 
 Microsoft has authorized the WikiKB maintainer to redistribute these unchanged
 compiled LexCAT binaries with WikiKB. The executable remains a separately
@@ -32,13 +32,16 @@ service.
 
 | Platform | Archive |
 | --- | --- |
-| `linux/x64` | `lexcat-v0.0.11-linux-x86_64.tar.gz` |
-| `darwin/arm64` | `lexcat-v0.0.11-macos-arm64.tar.gz` |
-| `win32/x64` | `lexcat-v0.0.11-windows-x86_64.zip` |
+| `linux/x64` | `lexcat-v0.0.12-linux-x86_64.tar.gz` |
+| `linux/arm64` | `lexcat-v0.0.12-linux-arm64.tar.gz` |
+| `darwin/arm64` | `lexcat-v0.0.12-macos-arm64.tar.gz` |
+| `darwin/x64` | `lexcat-v0.0.12-macos-x86_64.tar.gz` |
+| `win32/x64` | `lexcat-v0.0.12-windows-x86_64.zip` |
 
-LexCAT 0.0.11 publishes no `linux/arm64`, `win32/arm64`, or `darwin/x64`
-binary. On those platforms WikiKB fails with an explicit error and requires
-`WIKIKB_LEXCAT_BIN` to point at an approved executable.
+LexCAT 0.0.12 publishes no native `win32/arm64` binary. Windows on ARM runs the
+x64 executable under emulation, so WikiKB selects the `win32/x64` archive there.
+Any other platform fails with an explicit error and requires `WIKIKB_LEXCAT_BIN`
+to point at an approved executable.
 
 ## Index compatibility
 
@@ -47,3 +50,7 @@ LexCAT writes a single SQLite index whose schema version is pinned in
 and WikiKB's index contract (`index_config`) changes whenever the pinned
 runtime or schema changes, so cached indexes rebuild rather than load a
 mismatched file.
+
+WikiKB reads results through `lexcat query --json`, which returns each hit's
+text and provider metadata, so WikiKB never binds against the on-disk schema
+directly.

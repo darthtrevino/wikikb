@@ -1269,7 +1269,7 @@ jobs:
         env:
           GH_AW_AGENT_OUTPUT: ${{ runner.temp }}/gh-aw/safe-jobs/agent_output.json
         with:
-          node-version: "22.5.0"
+          node-version: "22"
       - name: Install and build WikiKB
         run: |
           set -euo pipefail

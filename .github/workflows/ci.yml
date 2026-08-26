@@ -49,19 +49,25 @@ jobs:
             os: ubuntu-latest
             platform: linux
             arch: x64
-            archive: lexcat-v0.0.11-linux-x86_64.tar.gz
+            archive: lexcat-v0.0.12-linux-x86_64.tar.gz
+            executable: lexcat
+          - name: Linux arm64
+            os: ubuntu-24.04-arm
+            platform: linux
+            arch: arm64
+            archive: lexcat-v0.0.12-linux-arm64.tar.gz
             executable: lexcat
           - name: macOS arm64
             os: macos-15
             platform: darwin
             arch: arm64
-            archive: lexcat-v0.0.11-macos-arm64.tar.gz
+            archive: lexcat-v0.0.12-macos-arm64.tar.gz
             executable: lexcat
           - name: Windows x64
             os: windows-latest
             platform: win32
             arch: x64
-            archive: lexcat-v0.0.11-windows-x86_64.zip
+            archive: lexcat-v0.0.12-windows-x86_64.zip
             executable: lexcat.exe
     steps:
       - name: Checkout repository
@@ -85,8 +91,9 @@ jobs:
             tar -xzf "$archive" -C "$runtime_dir"
           fi
           chmod +x "$runtime_dir/${{ matrix.executable }}"
-          # LexCAT exposes no --version flag, so the vendored build is pinned by
-          # the manifest checksum instead of a self-reported version string.
+          # LexCAT self-reports its version as 0.0.0 regardless of the release it
+          # came from, so the vendored build is pinned by the manifest checksum.
+          # --version is still exercised, for the index schema number it carries.
           node -e '
             const { createHash } = require("node:crypto");
             const { readFileSync } = require("node:fs");
@@ -96,10 +103,12 @@ jobs:
             const digest = createHash("sha256").update(readFileSync(process.argv[1])).digest("hex");
             if (digest !== artifact.executable_sha256) throw new Error(`executable checksum mismatch: ${digest}`);
           ' "$runtime_dir/${{ matrix.executable }}" "${{ matrix.platform }}" "${{ matrix.arch }}"
+          schema="$(node -p 'JSON.parse(require("node:fs").readFileSync("vendor/lexcat/manifest.json","utf8")).index_schema_version')"
+          "$runtime_dir/${{ matrix.executable }}" --version | grep -q "index schema $schema"
           cp -R wiki-mirror/. "$runtime_dir/corpus/"
           cd "$runtime_dir"
           # WikiKB always builds with a vocabulary floor of 1; the upstream
-          # default of 2 discards terms and can return zero hits.
+          # default of 2 drops every term confined to a single chunk.
           printf 'analyzer_min_vocab = 1\n' > lexcat.toml
           "./${{ matrix.executable }}" --index ci-smoke.db build corpus --config lexcat.toml
           test -f ci-smoke.db
@@ -110,23 +119,36 @@ jobs:
           set -euo pipefail
           runtime_dir="$RUNNER_TEMP/lexcat-runtime"
           cd "$runtime_dir"
-          "./${{ matrix.executable }}" --index ci-smoke.db query "agentic workflows" --n 10 > hits.txt
-          # LexCAT prints "[score] chunk_id" per hit and nothing else, so chunk
-          # text is read back out of the index the same way WikiKB does it.
+          "./${{ matrix.executable }}" --index ci-smoke.db query "agentic workflows" --n 10 --json > hits.json
+          # --json carries each hit's chunk text, which is how WikiKB reads
+          # results, so the assertion never touches the on-disk schema.
           node -e '
             const { readFileSync } = require("node:fs");
-            const { DatabaseSync } = require("node:sqlite");
-            const ids = readFileSync("hits.txt", "utf8")
-              .split(/\r?\n/)
-              .map((line) => line.match(/^\s*\[\s*-?\d+(?:\.\d+)?\s*\]\s+(.+?)\s*$/))
-              .filter(Boolean)
-              .map((match) => match[1]);
-            if (ids.length === 0) throw new Error("LexCAT returned no hits");
-            const db = new DatabaseSync("ci-smoke.db", { readOnly: true });
-            const statement = db.prepare("SELECT text FROM chunks WHERE chunk_id = ? LIMIT 1");
-            const matched = ids.some((id) => String(statement.all(id)[0]?.text ?? "").toLowerCase().includes("agentic workflow"));
-            db.close();
+            const { hits } = JSON.parse(readFileSync("hits.json", "utf8"));
+            if (!Array.isArray(hits) || hits.length === 0) throw new Error("LexCAT returned no hits");
+            const matched = hits.some((hit) => String(hit.text ?? "").toLowerCase().includes("agentic workflow"));
             if (!matched) throw new Error("no retrieved chunk contained the query terms");
+          '
+
+      - name: Exercise incremental reindex
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_dir="$RUNNER_TEMP/lexcat-runtime"
+          cd "$runtime_dir"
+          printf -- '---\ntitle: "CI Delta"\nwikikb_path: "concepts/ci-delta.md"\n---\n\n# CI Delta\n\nA sentinel page mentioning vermiculite telemetry.\n' > corpus/ci-delta.md
+          "./${{ matrix.executable }}" --index ci-smoke.db sync corpus | grep -q 'synced'
+          "./${{ matrix.executable }}" --index ci-smoke.db query "vermiculite telemetry" --n 5 --json > delta.json
+          # Frontmatter staged with a document must come back on the hit payload,
+          # because that is where WikiKB reads a result's wiki path and title.
+          node -e '
+            const { readFileSync } = require("node:fs");
+            const { hits } = JSON.parse(readFileSync("delta.json", "utf8"));
+            const hit = hits.find((entry) => String(entry.doc_id ?? "") === "ci-delta.md");
+            if (!hit) throw new Error("incremental sync did not make the new page retrievable");
+            if (hit.payload?.fields?.wikikb_path !== "concepts/ci-delta.md") {
+              throw new Error(`frontmatter payload missing: ${JSON.stringify(hit.payload)}`);
+            }
           '
 
       - name: Exercise WikiKB runtime integration

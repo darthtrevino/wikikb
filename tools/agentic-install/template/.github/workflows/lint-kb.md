@@ -47,7 +47,7 @@ safe-outputs:
         - name: Set up Node.js
           uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
           with:
-            node-version: "22.5.0"
+            node-version: "22"
         - name: Install, lint, and report
           env:
             GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

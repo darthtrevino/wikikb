@@ -121,7 +121,7 @@ const currentActionPins = new Map([
 ]);
 
 if (packageJson.private !== true) errors.push("Root package.json must remain private; WikiKB is released from source, not npm.");
-if (packageJson.engines?.node !== ">=22.5.0") errors.push("package.json must declare Node.js >=22.5.0 for node:sqlite.");
+if (packageJson.engines?.node !== ">=22") errors.push("package.json must declare Node.js >=22.");
 if (!packageJson.scripts?.["validate:release"]) errors.push("package.json is missing validate:release.");
 if (!packageJson.scripts?.["release:check"]) errors.push("package.json is missing release:check.");
 if (!packageJson.scripts?.["bundle:check"]) errors.push("package.json is missing bundle:check.");
@@ -130,7 +130,7 @@ if (!packageJson.scripts?.["test:wkb:node"]?.includes("--test-concurrency=1")) {
   errors.push("Node test files must run sequentially because installer coverage rebuilds the shared CLI output.");
 }
 if (packageLock.version !== packageJson.version) errors.push("package-lock.json version does not match package.json.");
-if (packageLock.packages?.[""]?.engines?.node !== ">=22.5.0") errors.push("package-lock.json must require Node.js >=22.5.0.");
+if (packageLock.packages?.[""]?.engines?.node !== ">=22") errors.push("package-lock.json must require Node.js >=22.");
 if (cliVersion !== packageJson.version) errors.push("CLI VERSION does not match package.json.");
 if (runtimePackage.version !== packageJson.version || runtimePackageLock.version !== packageJson.version) {
   errors.push("Agentic installer runtime versions must match package.json.");
@@ -138,8 +138,8 @@ if (runtimePackage.version !== packageJson.version || runtimePackageLock.version
 if (runtimePackageLock.packages?.[""]?.name !== runtimePackage.name) {
   errors.push("Agentic installer runtime package-lock does not match its package name.");
 }
-if (runtimePackage.engines?.node !== ">=22.5.0" || runtimePackageLock.packages?.[""]?.engines?.node !== ">=22.5.0") {
-  errors.push("Agentic installer runtime metadata must require Node.js >=22.5.0.");
+if (runtimePackage.engines?.node !== ">=22" || runtimePackageLock.packages?.[""]?.engines?.node !== ">=22") {
+  errors.push("Agentic installer runtime metadata must require Node.js >=22.");
 }
 if (!read("README.md").includes("Install WikiKB using https://github.com/githubnext/wikikb/blob/main/INSTALL.md")) {
   errors.push("README must lead installation with the agent-guided INSTALL.md prompt.");
@@ -316,8 +316,8 @@ if (!read(".github/workflows/ci.yml").includes("node: [22, 24]")) {
   errors.push("CI must test every supported Node.js LTS line: 22 and 24.");
 }
 for (const workflow of ["compile-kb.md", "explore-kb.md", "index-wiki.yml", "lint-kb.md", "query-kb.md", "search-kb.md"]) {
-  if (!read(`tools/agentic-install/template/.github/workflows/${workflow}`).includes('node-version: "22.5.0"')) {
-    errors.push(`${workflow} must use the minimum supported Node.js 22.5.0 runtime.`);
+  if (!read(`tools/agentic-install/template/.github/workflows/${workflow}`).includes('node-version: "22"')) {
+    errors.push(`${workflow} must use the minimum supported Node.js 22 runtime.`);
   }
 }
 for (const referenceFile of ["README.md", "INSTALL.md", "SKILL.md", "docs/release-checklist.md", "tools/wikikb-local/install.sh"]) {
@@ -339,14 +339,14 @@ if (
 if (
   lexcatManifest.schema_version !== 1 ||
   lexcatManifest.name !== "LEXCAT" ||
-  lexcatManifest.version !== "0.0.11" ||
+  lexcatManifest.version !== "0.0.12" ||
   lexcatManifest.notices !== "THIRD_PARTY_NOTICES.txt" ||
   !/^[a-f0-9]{64}$/.test(lexcatManifest.notices_sha256 || "") ||
   !Number.isInteger(lexcatManifest.index_schema_version) ||
   "model" in lexcatManifest ||
   !Array.isArray(lexcatManifest.artifacts)
 ) {
-  errors.push("vendor/lexcat/manifest.json must declare the approved model-free LexCAT 0.0.11 artifact and notice metadata.");
+  errors.push("vendor/lexcat/manifest.json must declare the approved model-free LexCAT 0.0.12 artifact and notice metadata.");
 } else {
   const noticesPath = rel("vendor", "lexcat", lexcatManifest.notices);
   if (!fs.existsSync(noticesPath)) {
@@ -359,7 +359,7 @@ if (
     const noticesDigest = crypto.createHash("sha256").update(fs.readFileSync(noticesPath)).digest("hex");
     if (noticesDigest !== lexcatManifest.notices_sha256) errors.push("LexCAT third-party notice checksum mismatch.");
   }
-  const expectedPlatforms = new Set(["darwin/arm64", "linux/x64", "win32/x64"]);
+  const expectedPlatforms = new Set(["darwin/arm64", "darwin/x64", "linux/arm64", "linux/x64", "win32/x64"]);
   const seenPlatforms = new Set();
   for (const artifact of lexcatManifest.artifacts) {
     const platform = `${artifact.platform}/${artifact.arch}`;

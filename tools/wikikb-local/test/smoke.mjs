@@ -338,20 +338,20 @@ test("staged corpus filenames cannot collide when wiki paths flatten alike", () 
   writeState(cacheDir, "test-kb");
   indexWithFakeLexcat(cacheDir);
 
-  const corpusRoot = join(cacheDir, "test-kb", "index-store", "lexcat-corpus");
-  const corpusDir = join(corpusRoot, "owner_demo-repo");
-  const manifest = JSON.parse(readFileSync(join(corpusRoot, "owner_demo-repo.corpus.json"), "utf8"));
-  const nested = manifest.documents["sources/a/b.md"].path;
-  const flat = manifest.documents["sources/a_b.md"].path;
-  assert.notEqual(nested, flat);
-  assert.match(readFileSync(join(corpusDir, nested), "utf8"), /Nested path marker/);
-  assert.match(readFileSync(join(corpusDir, flat), "utf8"), /Flat path marker/);
-  assert.equal(readdirSync(corpusDir).filter((entry) => entry.endsWith(".md")).length, 2);
+  const corpusDir = join(cacheDir, "test-kb", "index-store", "lexcat-corpus", "owner_demo-repo");
+  const staged = readdirSync(corpusDir).filter((entry) => entry.endsWith(".md"));
+  assert.equal(staged.length, 2);
+  const byWikiPath = new Map(staged.map((entry) => {
+    const body = readFileSync(join(corpusDir, entry), "utf8");
+    return [body.match(/^wikikb_path: "(.+)"$/m)[1], body];
+  }));
+  assert.match(byWikiPath.get("sources/a/b.md"), /Nested path marker/);
+  assert.match(byWikiPath.get("sources/a_b.md"), /Flat path marker/);
   // LexCAT indexes every file it walks, so the build root holds documents only.
   assert.deepEqual(readdirSync(corpusDir).filter((entry) => !entry.endsWith(".md")), []);
 });
 
-test("staged corpus carries prose without frontmatter LexCAT would index as body text", () => {
+test("staged corpus carries wiki identity as frontmatter LexCAT hands back on every hit", () => {
   const cacheDir = mkdtempSync(join(tmpdir(), "wikikb-test-"));
   assert.equal(run(["add", "test-kb", testSlug], cacheDir).status, 0);
   writeWiki(cacheDir, "test-kb", "sources/fox.md", "# Fox\n\nFoxes are cunning animals.\n");
@@ -359,14 +359,15 @@ test("staged corpus carries prose without frontmatter LexCAT would index as body
   indexWithFakeLexcat(cacheDir);
 
   const corpusRoot = join(cacheDir, "test-kb", "index-store", "lexcat-corpus");
-  const manifest = JSON.parse(readFileSync(join(corpusRoot, "owner_demo-repo.corpus.json"), "utf8"));
-  const document = manifest.documents["sources/fox.md"];
-  assert.equal(document.title, "Fox");
-  assert.equal(document.source_path, "sources/fox.md");
-  const staged = readFileSync(join(corpusRoot, "owner_demo-repo", document.path), "utf8");
-  assert.equal(staged, "# Fox\n\nFoxes are cunning animals.\n");
-  assert.doesNotMatch(staged, /^---$/m);
-  assert.doesNotMatch(staged, /wikikb_path|Source path:/);
+  const corpusDir = join(corpusRoot, "owner_demo-repo");
+  const staged = readdirSync(corpusDir).filter((entry) => entry.endsWith(".md"));
+  assert.equal(staged.length, 1);
+  assert.equal(
+    readFileSync(join(corpusDir, staged[0]), "utf8"),
+    '---\ntitle: "Fox"\nwikikb_path: "sources/fox.md"\n---\n\n# Fox\n\nFoxes are cunning animals.\n',
+  );
+  // Identity rides the document itself now, so no side manifest is written.
+  assert.deepEqual(readdirSync(corpusRoot).filter((entry) => entry.endsWith(".corpus.json")), []);
 });
 
 test("index and search use the LexCAT runtime contract", { skip: process.platform === "win32" }, () => {
@@ -394,10 +395,13 @@ test("index and search use the LexCAT runtime contract", { skip: process.platfor
   const commands = readFileSync(commandLog, "utf8").trim().split("\n").map((line) => JSON.parse(line));
   const builds = commands.filter((args) => args.includes("build"));
   assert.ok(builds.length >= 2);
-  // Every build is a full rebuild into a scratch file that is swapped in.
+  // `--force` is the repair path, so it rebuilds rather than reconciling.
+  assert.equal(commands.filter((args) => args.includes("sync")).length, 0);
+  // Every build writes to a scratch file that is swapped in once verified.
   assert.ok(builds.every((args) => args[0] === "--index" && args[1].endsWith(".db.building")));
   assert.ok(builds.every((args) => args.includes("--config")));
-  assert.ok(commands.some((args) => args.includes("query") && args.includes("--n")));
+  // Retrieval reads results out of the machine-readable query document.
+  assert.ok(commands.some((args) => args.includes("query") && args.includes("--n") && args.includes("--json")));
 
   const unparseable = run(["test-kb", "search", "cunning fox", "--top", "1"], cacheDir, {
     ...env,
@@ -405,7 +409,7 @@ test("index and search use the LexCAT runtime contract", { skip: process.platfor
   });
   assert.notEqual(unparseable.status, 0);
   assert.equal(unparseable.stdout, "");
-  assert.match(unparseable.stderr, /LexCAT returned no chunks/);
+  assert.match(unparseable.stderr, /Could not parse LexCAT query output/);
 
   const emptyQuery = run(["test-kb", "search", "cunning fox", "--top", "1"], cacheDir, {
     ...env,
@@ -415,6 +419,8 @@ test("index and search use the LexCAT runtime contract", { skip: process.platfor
   assert.equal(emptyQuery.stdout, "");
   assert.match(emptyQuery.stderr, /LexCAT returned no chunks/);
 
+  // A ranked hit carrying no text cannot be cited, so it is dropped rather
+  // than surfaced as an empty context block.
   const unknownChunk = run(["test-kb", "search", "cunning fox", "--top", "1"], cacheDir, {
     ...env,
     WIKIKB_FAKE_LEXCAT_UNKNOWN_CHUNK: "1",
@@ -445,8 +451,31 @@ test("index and search use the LexCAT runtime contract", { skip: process.platfor
   assert.match(afterFailure.stdout, /Fox/);
 });
 
-const vendoredLexcatManifest = JSON.parse(readFileSync(join(repoRoot, "vendor", "lexcat", "manifest.json"), "utf8"));
-const vendoredLexcatArtifact = vendoredLexcatManifest.artifacts.find(
+test("a warm index is reconciled incrementally instead of rebuilt", { skip: process.platform === "win32" }, () => {
+  const cacheDir = mkdtempSync(join(tmpdir(), "wikikb-test-"));
+  const commandLog = join(cacheDir, "lexcat-commands.jsonl");
+  assert.equal(run(["add", "test-kb", testSlug], cacheDir).status, 0);
+  writeWiki(cacheDir, "test-kb", "sources/fox.md", "# Fox\n\nFoxes are cunning animals.\n");
+  writeState(cacheDir, "test-kb");
+
+  const env = { WIKIKB_LEXCAT_BIN: writeFakeLexcatCli(cacheDir), WIKIKB_FAKE_LEXCAT_LOG: commandLog };
+  assert.equal(run(["test-kb", "index"], cacheDir, env).status, 0);
+  assert.deepEqual(lexcatCommands(commandLog), ["build"]);
+
+  writeWiki(cacheDir, "test-kb", "sources/zeppelin.md", "# Zeppelin\n\nAirships once crossed the Atlantic.\n");
+  writeState(cacheDir, "test-kb");
+  const reindexed = run(["test-kb", "index"], cacheDir, env);
+  assert.equal(reindexed.status, 0, reindexed.stderr);
+  assert.match(reindexed.stdout, /incremental/);
+  assert.deepEqual(lexcatCommands(commandLog), ["build", "sync"]);
+
+  const search = run(["test-kb", "search", "airships", "--top", "1"], cacheDir, env);
+  assert.equal(search.status, 0, search.stderr);
+  assert.match(search.stdout, /Zeppelin/);
+  assert.match(search.stdout, /sources\/zeppelin\.md/);
+});
+
+const vendoredLexcatManifest = JSON.parse(readFileSync(join(repoRoot, "vendor", "lexcat", "manifest.json"), "utf8"));const vendoredLexcatArtifact = vendoredLexcatManifest.artifacts.find(
   (candidate) => candidate.platform === process.platform && candidate.arch === process.arch,
 );
 
@@ -482,8 +511,8 @@ test("vendored LexCAT indexes a staged wiki corpus and returns chunk text", {
   assert.equal(repaired.status, 0, repaired.stderr);
   assert.equal(createHash("sha256").update(readFileSync(runtimeBin)).digest("hex"), vendoredLexcatArtifact.executable_sha256);
 
-  // LexCAT only reports `[score] chunk_id`, so text, title and wiki path all
-  // come back through the index database and the corpus manifest.
+  // Text, title and wiki path all come back inside `query --json`, so this
+  // exercises the real payload round-trip rather than a rejoin against disk.
   const search = run(["test-kb", "search", "cedar observatory", "--top", "2"], cacheDir);
   assert.equal(search.status, 0, search.stderr);
   assert.match(search.stdout, /Fox Retrieval/);
@@ -550,9 +579,11 @@ test("search validates options and filters by all requested tags", () => {
   const scopedIndexes = readdirSync(indexRoot).filter((entry) => entry.includes("__tags_") && entry.endsWith(".db"));
   assert.equal(scopedIndexes.length, 1);
   const corpusRoot = join(cacheDir, "test-kb", "index-store", "lexcat-corpus");
-  const scopedManifest = readdirSync(corpusRoot).find((entry) => entry.includes("__tags_") && entry.endsWith(".corpus.json"));
-  const scopedDocs = JSON.parse(readFileSync(join(corpusRoot, scopedManifest), "utf8")).documents;
-  assert.deepEqual(Object.keys(scopedDocs), ["sources/alpha.md"]);
+  const scopedCorpus = readdirSync(corpusRoot).find((entry) => entry.includes("__tags_"));
+  const scopedDocs = readdirSync(join(corpusRoot, scopedCorpus))
+    .filter((entry) => entry.endsWith(".md"))
+    .map((entry) => readFileSync(join(corpusRoot, scopedCorpus, entry), "utf8").match(/^wikikb_path: "(.+)"$/m)[1]);
+  assert.deepEqual(scopedDocs, ["sources/alpha.md"]);
   assert.match(filtered.stderr, /Searching scoped index for tags #release, #shared \(1 pages indexed\)/);
 
   const repeated = run(["test-kb", "search", "unique evidence", "--tag", "release,shared"], cacheDir, lexcatEnv);
@@ -1145,7 +1176,7 @@ function lexcatCommands(logPath) {
     .trim()
     .split("\n")
     .map((line) => JSON.parse(line))
-    .map((args) => ["build", "query", "export-representation"].find((candidate) => args.includes(candidate)));
+    .map((args) => ["build", "sync", "query", "export-representation"].find((candidate) => args.includes(candidate)));
 }
 
 function indexWithFakeLexcat(cacheDir, kb = "test-kb") {
@@ -1160,7 +1191,6 @@ function writeFakeLexcatCli(cacheDir) {
   writeFileSync(bin, `#!/usr/bin/env node
 const fs = require("node:fs");
 const path = require("node:path");
-const { DatabaseSync } = require("node:sqlite");
 
 const args = process.argv.slice(2);
 if (process.env.WIKIKB_FAKE_LEXCAT_LOG) fs.appendFileSync(process.env.WIKIKB_FAKE_LEXCAT_LOG, JSON.stringify(args) + "\\n");
@@ -1169,44 +1199,75 @@ const option = (name) => {
   return index >= 0 ? args[index + 1] : undefined;
 };
 const indexPath = option("--index") || "lexcat.db";
-const command = ["build", "query", "export-representation"].find((candidate) => args.includes(candidate));
+const command = ["build", "sync", "query", "export-representation"].find((candidate) => args.includes(candidate));
 
-if (command === "build") {
-  if (process.env.WIKIKB_FAKE_LEXCAT_SKIP_INDEX === "1") process.exit(0);
-  const corpus = args[args.indexOf("build") + 1];
-  const database = new DatabaseSync(indexPath);
-  database.exec("CREATE TABLE chunks (row INTEGER PRIMARY KEY, chunk_id TEXT, doc_id TEXT, text TEXT, nature TEXT, provider TEXT, kind TEXT, analysis_text TEXT, payload TEXT, content_hash TEXT)");
-  database.exec("CREATE INDEX chunks_chunk_id ON chunks (chunk_id)");
-  if (process.env.WIKIKB_FAKE_LEXCAT_EMPTY_INDEX !== "1") {
-    const insert = database.prepare("INSERT INTO chunks (chunk_id, doc_id, text, provider) VALUES (?, ?, ?, 'fs')");
-    for (const entry of fs.readdirSync(corpus).filter((name) => name.endsWith(".md"))) {
-      insert.run(entry, entry, fs.readFileSync(path.join(corpus, entry), "utf8"));
-    }
+// Mirrors LexCAT's default --frontmatter=payload: the block is stripped out of
+// the indexed text and carried on the chunk payload instead.
+const splitDocument = (raw) => {
+  const fields = {};
+  if (!raw.startsWith("---\\n")) return { fields: null, text: raw };
+  const end = raw.indexOf("\\n---\\n", 3);
+  if (end === -1) return { fields: null, text: raw };
+  for (const line of raw.slice(4, end).split("\\n")) {
+    const separator = line.indexOf(":");
+    if (separator === -1) continue;
+    const value = line.slice(separator + 1).trim();
+    fields[line.slice(0, separator).trim()] =
+      value.length > 1 && value.startsWith('"') && value.endsWith('"') ? JSON.parse(value) : value;
   }
-  database.close();
-  process.stderr.write("mode: Lexical\\n");
+  return { fields, text: raw.slice(end + 5) };
+};
+
+const readCorpus = (corpus) =>
+  fs.readdirSync(corpus)
+    .filter((name) => name.endsWith(".md"))
+    .map((entry) => {
+      const parsed = splitDocument(fs.readFileSync(path.join(corpus, entry), "utf8"));
+      return {
+        chunk_id: entry,
+        doc_id: entry,
+        text: parsed.text,
+        nature: "text",
+        provider: "text-files",
+        kind: parsed.fields ? "frontmatter" : "text",
+        payload: parsed.fields ? { fields: parsed.fields, format: "yaml" } : null,
+      };
+    });
+
+if (command === "build" || command === "sync") {
+  if (process.env.WIKIKB_FAKE_LEXCAT_SKIP_INDEX === "1") process.exit(0);
+  const corpus = args[args.indexOf(command) + 1];
+  const chunks = process.env.WIKIKB_FAKE_LEXCAT_EMPTY_INDEX === "1" ? [] : readCorpus(corpus);
+  // Real LexCAT keeps everything in the one file named by --index, so the fake
+  // does too: a scratch index that gets renamed carries its chunks along.
+  fs.writeFileSync(indexPath, JSON.stringify(chunks));
+  process.stderr.write("fusing " + chunks.length + " text file(s) and 0 provider(s)\\n");
+  const verb = command === "sync" ? "synced" : "indexed";
+  process.stdout.write(verb + " " + chunks.length + " chunk(s), " + chunks.length * 5 + " term(s) -> " + indexPath + "\\n");
 } else if (command === "query") {
-  if (process.env.WIKIKB_FAKE_LEXCAT_EMPTY_QUERY === "1") process.exit(0);
   if (process.env.WIKIKB_FAKE_LEXCAT_UNPARSEABLE === "1") {
-    process.stdout.write("not a hit line\\n");
+    process.stdout.write("not json at all\\n");
+    process.exit(0);
+  }
+  if (process.env.WIKIKB_FAKE_LEXCAT_EMPTY_QUERY === "1") {
+    process.stdout.write(JSON.stringify({ mode: "lexical", text_available: true, hits: [] }) + "\\n");
     process.exit(0);
   }
   if (process.env.WIKIKB_FAKE_LEXCAT_UNKNOWN_CHUNK === "1") {
-    process.stdout.write("[9.0000] no-such-chunk\\n");
+    // A ranked chunk whose text could not be read back carries no text at all.
+    const orphan = { row: 1, score: 9, chunk_id: "no-such-chunk", doc_id: "no-such-chunk", text: "", payload: null };
+    process.stdout.write(JSON.stringify({ mode: "lexical", text_available: true, hits: [orphan] }) + "\\n");
     process.exit(0);
   }
-  const query = args[args.indexOf("query") + 1].toLowerCase();
-  const term = query.split(/\\s+/)[0];
-  const database = new DatabaseSync(indexPath, { readOnly: true });
-  const rows = database.prepare("SELECT chunk_id, text FROM chunks").all();
-  database.close();
+  const term = args[args.indexOf("query") + 1].toLowerCase().trim().split(" ")[0];
+  const chunks = fs.existsSync(indexPath) ? JSON.parse(fs.readFileSync(indexPath, "utf8")) : [];
   const limit = Number(option("--n") || 10);
-  process.stderr.write("mode: Lexical\\n");
-  rows
-    .map((row) => ({ id: row.chunk_id, score: String(row.text || "").toLowerCase().includes(term) ? 2 : 0.5 }))
+  const hits = chunks
+    .map((chunk, row) => ({ ...chunk, row, score: chunk.text.toLowerCase().includes(term) ? 2 : 0.5 }))
     .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
-    .forEach((hit) => process.stdout.write("[" + hit.score.toFixed(4) + "] " + hit.id + "\\n"));
+    .slice(0, limit);
+  process.stderr.write("mode: Lexical\\n");
+  process.stdout.write(JSON.stringify({ mode: "lexical", text_available: true, hits }) + "\\n");
 } else {
   process.stderr.write("unsupported fake LexCAT command\\n");
   process.exitCode = 2;
@@ -1367,7 +1428,10 @@ exec "$REAL_GIT" -c "url.$FAKE_REMOTE.insteadOf=$CLEAN_REMOTE" "$@"
   assert.equal(refreshed.status, 0, refreshed.stderr);
   assert.match(refreshed.stdout, /refreshed shared-cache fact/);
   commandsB = lexcatCommands(logB);
-  assert.equal(commandsB.filter((command) => command === "build").length, 1);
+  // The restored index matches the current build contract, so a changed source
+  // is reconciled in place rather than rebuilt from scratch.
+  assert.equal(commandsB.filter((command) => command === "sync").length, 1);
+  assert.equal(commandsB.filter((command) => command === "build").length, 0);
 
   const cacheC = mkdtempSync(join(tmpdir(), "wikikb-client-c-"));
   const logC = join(cacheC, "commands.jsonl");
