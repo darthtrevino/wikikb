@@ -498,8 +498,13 @@ const vendoredLexcatArtifact = vendoredLexcatManifest.artifacts.find(
   (candidate) => candidate.platform === process.platform && candidate.arch === process.arch,
 );
 
+// The `wkb` launcher is a bash script with no Windows shim, so a Windows host
+// cannot spawn it directly. The Windows CI job exercises the vendored runtime
+// against the LexCAT CLI itself instead of through the launcher.
+const canDriveWkbLauncher = process.platform !== "win32";
+
 test("vendored LexCAT indexes a staged wiki corpus and returns chunk text", {
-  skip: !vendoredLexcatArtifact,
+  skip: !vendoredLexcatArtifact || !canDriveWkbLauncher,
 }, () => {
   const cacheDir = mkdtempSync(join(tmpdir(), "wikikb-lexcat-real-"));
   assert.equal(run(["add", "test-kb", testSlug], cacheDir).status, 0);
@@ -540,7 +545,7 @@ test("vendored LexCAT indexes a staged wiki corpus and returns chunk text", {
 });
 
 test("concurrent retrieval shares one verified vendored runtime", {
-  skip: !vendoredLexcatArtifact,
+  skip: !vendoredLexcatArtifact || !canDriveWkbLauncher,
 }, async () => {
   const cacheDir = mkdtempSync(join(tmpdir(), "wikikb-lexcat-lock-"));
   assert.equal(run(["add", "test-kb", testSlug], cacheDir).status, 0);

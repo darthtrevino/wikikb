@@ -99,9 +99,9 @@ jobs:
             const { readFileSync } = require("node:fs");
             const manifest = JSON.parse(readFileSync("vendor/lexcat/manifest.json", "utf8"));
             const artifact = manifest.artifacts.find((entry) => entry.platform === process.argv[2] && entry.arch === process.argv[3]);
-            if (!artifact) throw new Error(`no vendored artifact for ${process.argv[2]}/${process.argv[3]}`);
+            if (!artifact) throw new Error("no vendored artifact for " + process.argv[2] + "/" + process.argv[3]);
             const digest = createHash("sha256").update(readFileSync(process.argv[1])).digest("hex");
-            if (digest !== artifact.executable_sha256) throw new Error(`executable checksum mismatch: ${digest}`);
+            if (digest !== artifact.executable_sha256) throw new Error("executable checksum mismatch: " + digest);
           ' "$runtime_dir/${{ matrix.executable }}" "${{ matrix.platform }}" "${{ matrix.arch }}"
           schema="$(node -p 'JSON.parse(require("node:fs").readFileSync("vendor/lexcat/manifest.json","utf8")).index_schema_version')"
           version="$(node -p 'JSON.parse(require("node:fs").readFileSync("vendor/lexcat/manifest.json","utf8")).version')"
@@ -117,8 +117,8 @@ jobs:
           node -e '
             const { readFileSync } = require("node:fs");
             const report = JSON.parse(readFileSync("build.json", "utf8"));
-            if (!(report.chunks > 0)) throw new Error(`build indexed no chunks: ${JSON.stringify(report)}`);
-            if (!(report.terms > 0)) throw new Error(`build indexed no terms: ${JSON.stringify(report)}`);
+            if (!(report.chunks > 0)) throw new Error("build indexed no chunks: " + JSON.stringify(report));
+            if (!(report.terms > 0)) throw new Error("build indexed no terms: " + JSON.stringify(report));
           '
           test -f ci-smoke.db
 
@@ -151,8 +151,8 @@ jobs:
           node -e '
             const { readFileSync } = require("node:fs");
             const report = JSON.parse(readFileSync("sync.json", "utf8"));
-            if (!(report.chunks > 0) || !(report.terms > 0)) throw new Error(`sync left an unsearchable index: ${JSON.stringify(report)}`);
-            if (!(report.added >= 1)) throw new Error(`sync did not report the added page: ${JSON.stringify(report)}`);
+            if (!(report.chunks > 0) || !(report.terms > 0)) throw new Error("sync left an unsearchable index: " + JSON.stringify(report));
+            if (!(report.added >= 1)) throw new Error("sync did not report the added page: " + JSON.stringify(report));
           '
           "./${{ matrix.executable }}" --index ci-smoke.db query "vermiculite telemetry" --n 5 --json > delta.json
           # Frontmatter staged with a document must come back on the hit payload,
@@ -163,7 +163,7 @@ jobs:
             const hit = hits.find((entry) => String(entry.doc_id ?? "") === "ci-delta.md");
             if (!hit) throw new Error("incremental sync did not make the new page retrievable");
             if (hit.payload?.fields?.wikikb_path !== "concepts/ci-delta.md") {
-              throw new Error(`frontmatter payload missing: ${JSON.stringify(hit.payload)}`);
+              throw new Error("frontmatter payload missing: " + JSON.stringify(hit.payload));
             }
           '
 
