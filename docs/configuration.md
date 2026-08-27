@@ -94,7 +94,7 @@ LexCAT is model-free lexical BM25 retrieval. It downloads no model, performs no 
 
 Wiki identity travels with the corpus as YAML frontmatter, which LexCAT strips from the indexed text and returns on every chunk of a document, so retrieval reads titles, wiki paths, and chunk text straight out of `lexcat query --json`. An index built by the current contract is refreshed with `lexcat sync`, which reconciles only added, changed, and removed documents; `wkb <kb> index --force` always rebuilds from scratch.
 
-WikiKB generates a `lexcat.toml` that sets `analyzer_min_vocab = 1`. LexCAT's default of `2` prunes any term that occurs in a single chunk, which silently makes rare identifiers — the highest-value lookups in a knowledge base — unsearchable while still exiting 0.
+Indexing runs `build`/`sync` with `--json` and requires the reported chunk **and** term counts to be non-zero. Neither an empty corpus nor a vocabulary the analyzer collapsed to nothing is an error to LexCAT — both produce a valid index that answers every later query with no hits at exit 0 — so an index that cannot be searched is rejected when it is built rather than silently at query time.
 
 The parentless `wikikb-cache-v1` branch stores at most eight indexes plus integrity manifests and no Markdown. Restore validates source, runtime, paths, size, and checksums. These checks prove integrity, not authorship: anyone allowed to write the private wiki is inside the cache trust boundary. A requested push that remains unpublished fails the command.
 

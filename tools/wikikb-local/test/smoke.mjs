@@ -399,7 +399,8 @@ test("index and search use the LexCAT runtime contract", { skip: process.platfor
   assert.equal(commands.filter((args) => args.includes("sync")).length, 0);
   // Every build writes to a scratch file that is swapped in once verified.
   assert.ok(builds.every((args) => args[0] === "--index" && args[1].endsWith(".db.building")));
-  assert.ok(builds.every((args) => args.includes("--config")));
+  // Indexing reads its chunk and term counts out of the machine-readable report.
+  assert.ok(builds.every((args) => args.includes("--json")));
   // Retrieval reads results out of the machine-readable query document.
   assert.ok(commands.some((args) => args.includes("query") && args.includes("--n") && args.includes("--json")));
 
@@ -436,14 +437,24 @@ test("index and search use the LexCAT runtime contract", { skip: process.platfor
   assert.notEqual(missingIndex.status, 0);
   assert.match(missingIndex.stderr, /completed without creating an index/);
 
-  // An index whose analyzer discarded every term is a silent-failure mode
-  // upstream, so WikiKB rejects it at build time instead of at query time.
+  // An empty corpus builds and queries at exit 0 upstream, so WikiKB rejects it
+  // at build time instead of letting every later search return nothing.
   const emptyIndex = run(["test-kb", "index", "--force"], cacheDir, {
     ...env,
     WIKIKB_FAKE_LEXCAT_EMPTY_INDEX: "1",
   });
   assert.notEqual(emptyIndex.status, 0);
   assert.match(emptyIndex.stderr, /indexed no chunks/);
+
+  // Chunks can be indexed while the analyzer discards every term, which leaves a
+  // populated but permanently unsearchable index -- the chunk count alone would
+  // not catch it.
+  const noTerms = run(["test-kb", "index", "--force"], cacheDir, {
+    ...env,
+    WIKIKB_FAKE_LEXCAT_NO_TERMS: "1",
+  });
+  assert.notEqual(noTerms.status, 0);
+  assert.match(noTerms.stderr, /no terms/);
 
   // A failed rebuild must leave the previous index queryable.
   const afterFailure = run(["test-kb", "search", "fox", "--top", "1"], cacheDir, env);
@@ -468,6 +479,13 @@ test("a warm index is reconciled incrementally instead of rebuilt", { skip: proc
   assert.equal(reindexed.status, 0, reindexed.stderr);
   assert.match(reindexed.stdout, /incremental/);
   assert.deepEqual(lexcatCommands(commandLog), ["build", "sync"]);
+  // The reconcile path reports its counts machine-readably too.
+  const syncArgs = readFileSync(commandLog, "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line))
+    .find((args) => args.includes("sync"));
+  assert.ok(syncArgs.includes("--json"));
 
   const search = run(["test-kb", "search", "airships", "--top", "1"], cacheDir, env);
   assert.equal(search.status, 0, search.stderr);
@@ -475,7 +493,8 @@ test("a warm index is reconciled incrementally instead of rebuilt", { skip: proc
   assert.match(search.stdout, /sources\/zeppelin\.md/);
 });
 
-const vendoredLexcatManifest = JSON.parse(readFileSync(join(repoRoot, "vendor", "lexcat", "manifest.json"), "utf8"));const vendoredLexcatArtifact = vendoredLexcatManifest.artifacts.find(
+const vendoredLexcatManifest = JSON.parse(readFileSync(join(repoRoot, "vendor", "lexcat", "manifest.json"), "utf8"));
+const vendoredLexcatArtifact = vendoredLexcatManifest.artifacts.find(
   (candidate) => candidate.platform === process.platform && candidate.arch === process.arch,
 );
 
@@ -1246,8 +1265,19 @@ if (command === "build" || command === "sync") {
   // does too: a scratch index that gets renamed carries its chunks along.
   fs.writeFileSync(indexPath, JSON.stringify(chunks));
   process.stderr.write("fusing " + chunks.length + " text file(s) and 0 provider(s)\\n");
-  const verb = command === "sync" ? "synced" : "indexed";
-  process.stdout.write(verb + " " + chunks.length + " chunk(s), " + chunks.length * 5 + " term(s) -> " + indexPath + "\\n");
+  // A collapsed vocabulary is the failure mode where chunks are indexed but
+  // nothing is retrievable, so it has to be expressible independently.
+  const terms = process.env.WIKIKB_FAKE_LEXCAT_NO_TERMS === "1" ? 0 : chunks.length * 5;
+  if (args.includes("--json")) {
+    const report = { index: indexPath, chunks: chunks.length, terms: terms, unreachable_chunks: 0 };
+    if (command === "sync") {
+      Object.assign(report, { dry_run: false, added: chunks.length, changed: 0, unchanged: 0, removed: 0 });
+    }
+    process.stdout.write(JSON.stringify(report) + "\\n");
+  } else {
+    const verb = command === "sync" ? "synced" : "indexed";
+    process.stdout.write(verb + " " + chunks.length + " chunk(s), " + terms + " term(s) -> " + indexPath + "\\n");
+  }
 } else if (command === "query") {
   if (process.env.WIKIKB_FAKE_LEXCAT_UNPARSEABLE === "1") {
     process.stdout.write("not json at all\\n");

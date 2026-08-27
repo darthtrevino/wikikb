@@ -49,25 +49,25 @@ jobs:
             os: ubuntu-latest
             platform: linux
             arch: x64
-            archive: lexcat-v0.0.13-linux-x86_64.tar.gz
+            archive: lexcat-v0.0.14-linux-x86_64.tar.gz
             executable: lexcat
           - name: Linux arm64
             os: ubuntu-24.04-arm
             platform: linux
             arch: arm64
-            archive: lexcat-v0.0.13-linux-arm64.tar.gz
+            archive: lexcat-v0.0.14-linux-arm64.tar.gz
             executable: lexcat
           - name: macOS arm64
             os: macos-15
             platform: darwin
             arch: arm64
-            archive: lexcat-v0.0.13-macos-arm64.tar.gz
+            archive: lexcat-v0.0.14-macos-arm64.tar.gz
             executable: lexcat
           - name: Windows x64
             os: windows-latest
             platform: win32
             arch: x64
-            archive: lexcat-v0.0.13-windows-x86_64.zip
+            archive: lexcat-v0.0.14-windows-x86_64.zip
             executable: lexcat.exe
     steps:
       - name: Checkout repository
@@ -91,7 +91,7 @@ jobs:
             tar -xzf "$archive" -C "$runtime_dir"
           fi
           chmod +x "$runtime_dir/${{ matrix.executable }}"
-          # 0.0.13 stamps the real release version into the binary (upstream #234),
+          # 0.0.14 stamps the real release version into the binary (upstream #234),
           # so --version pins both the release number and the index schema, on top
           # of the manifest checksum verified above.
           node -e '
@@ -109,10 +109,17 @@ jobs:
           "$runtime_dir/${{ matrix.executable }}" --version | grep -q "lexcat $version"
           cp -R wiki-mirror/. "$runtime_dir/corpus/"
           cd "$runtime_dir"
-          # WikiKB always builds with a vocabulary floor of 1; the upstream
-          # default of 2 drops every term confined to a single chunk.
-          printf 'analyzer_min_vocab = 1\n' > lexcat.toml
-          "./${{ matrix.executable }}" --index ci-smoke.db build corpus --config lexcat.toml
+          # Mirrors how WikiKB indexes: no config file, counts read out of the
+          # machine-readable report. An empty corpus and a collapsed vocabulary
+          # both build and query at exit 0, so both counts are asserted here.
+          "./${{ matrix.executable }}" --index ci-smoke.db build corpus --json > build.json
+          cat build.json
+          node -e '
+            const { readFileSync } = require("node:fs");
+            const report = JSON.parse(readFileSync("build.json", "utf8"));
+            if (!(report.chunks > 0)) throw new Error(`build indexed no chunks: ${JSON.stringify(report)}`);
+            if (!(report.terms > 0)) throw new Error(`build indexed no terms: ${JSON.stringify(report)}`);
+          '
           test -f ci-smoke.db
 
       - name: Exercise LexCAT retrieval
@@ -139,7 +146,14 @@ jobs:
           runtime_dir="$RUNNER_TEMP/lexcat-runtime"
           cd "$runtime_dir"
           printf -- '---\ntitle: "CI Delta"\nwikikb_path: "concepts/ci-delta.md"\n---\n\n# CI Delta\n\nA sentinel page mentioning vermiculite telemetry.\n' > corpus/ci-delta.md
-          "./${{ matrix.executable }}" --index ci-smoke.db sync corpus | grep -q 'synced'
+          "./${{ matrix.executable }}" --index ci-smoke.db sync corpus --json > sync.json
+          cat sync.json
+          node -e '
+            const { readFileSync } = require("node:fs");
+            const report = JSON.parse(readFileSync("sync.json", "utf8"));
+            if (!(report.chunks > 0) || !(report.terms > 0)) throw new Error(`sync left an unsearchable index: ${JSON.stringify(report)}`);
+            if (!(report.added >= 1)) throw new Error(`sync did not report the added page: ${JSON.stringify(report)}`);
+          '
           "./${{ matrix.executable }}" --index ci-smoke.db query "vermiculite telemetry" --n 5 --json > delta.json
           # Frontmatter staged with a document must come back on the hit payload,
           # because that is where WikiKB reads a result's wiki path and title.
