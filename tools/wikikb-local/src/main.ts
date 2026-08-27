@@ -870,12 +870,41 @@ function extractLexcatArtifact(artifact: LexcatArtifact, archivePath: string, in
     const digest = sha256File(extracted);
     if (digest !== artifact.executable_sha256) throw new Error(`Vendored LexCAT executable checksum mismatch for ${artifact.archive}`);
     chmodSync(extracted, 0o755);
-    rmSync(installDir, { recursive: true, force: true });
-    renameSync(temporaryDir, installDir);
-    return join(installDir, artifact.executable);
+    return publishLexcatRuntime(temporaryDir, installDir, artifact);
   } finally {
     rmSync(temporaryDir, { recursive: true, force: true });
   }
+}
+
+function publishLexcatRuntime(temporaryDir: string, installDir: string, artifact: LexcatArtifact): string {
+  const published = join(installDir, artifact.executable);
+  // Concurrent `wkb` processes can extract the same runtime at once. Publishing is
+  // a bare rename so an install directory that a sibling has already verified is
+  // never unlinked out from under the binary that sibling is about to spawn.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      renameSync(temporaryDir, installDir);
+      return published;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      // Renaming onto a populated directory fails with ENOTEMPTY on POSIX and
+      // EEXIST/EPERM on Windows. Anything else is a real failure.
+      if (code !== "ENOTEMPTY" && code !== "EEXIST" && code !== "EPERM" && code !== "EACCES") throw error;
+    }
+    // Something is already installed. If a sibling published a runtime matching the
+    // pinned digest, adopt it rather than replacing a directory that is already good.
+    if (isRegularFile(published) && sha256File(published) === artifact.executable_sha256) return published;
+    // Otherwise the cached directory is unusable, so swap it aside and retry.
+    const staleDir = join(dirname(installDir), `.stale-${process.pid}-${attempt}-${Date.now()}`);
+    try {
+      renameSync(installDir, staleDir);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      continue;
+    }
+    rmSync(staleDir, { recursive: true, force: true });
+  }
+  throw new Error(`Could not publish the vendored LexCAT runtime to ${installDir}`);
 }
 
 function selectLexcatArtifact(manifest: LexcatManifest): LexcatArtifact | undefined {

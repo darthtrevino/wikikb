@@ -534,21 +534,22 @@ test("concurrent retrieval shares one verified vendored runtime", {
   const runtimeRoot = join(cacheDir, "runtime", "lexcat");
   rmSync(runtimeRoot, { recursive: true, force: true });
 
-  const first = startRun(["test-kb", "search", "cardinal semaphore", "--top", "1"], cacheDir);
-  const second = startRun(["test-kb", "search", "cardinal semaphore", "--top", "1"], cacheDir);
+  // Four racers rather than two: the publish step is a rename, and a two-process
+  // race only lands in the vulnerable window intermittently.
+  const racers = Array.from({ length: 4 }, () =>
+    startRun(["test-kb", "search", "cardinal semaphore", "--top", "1"], cacheDir));
 
   let timeoutHandle;
   const timeout = new Promise((_, rejectPromise) => {
     timeoutHandle = setTimeout(() => rejectPromise(new Error("concurrent runtime-cache queries timed out")), 60_000);
   });
-  let firstResult;
-  let secondResult;
+  let results;
   try {
-    [firstResult, secondResult] = await Promise.race([Promise.all([first.completed, second.completed]), timeout]);
+    results = await Promise.race([Promise.all(racers.map((racer) => racer.completed)), timeout]);
   } finally {
     clearTimeout(timeoutHandle);
   }
-  for (const result of [firstResult, secondResult]) {
+  for (const result of results) {
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Concurrency/);
   }
@@ -557,8 +558,11 @@ test("concurrent retrieval shares one verified vendored runtime", {
     createHash("sha256").update(readFileSync(join(installDir, vendoredLexcatArtifact.executable))).digest("hex"),
     vendoredLexcatArtifact.executable_sha256,
   );
-  // Extraction is atomic, so no partial scratch directories may survive.
-  assert.deepEqual(readdirSync(runtimeRoot).filter((entry) => entry.startsWith(".extract-")), []);
+  // Publishing is atomic, so no partial scratch directories may survive.
+  assert.deepEqual(
+    readdirSync(runtimeRoot).filter((entry) => entry.startsWith(".extract-") || entry.startsWith(".stale-")),
+    [],
+  );
 });
 
 test("search validates options and filters by all requested tags", () => {
